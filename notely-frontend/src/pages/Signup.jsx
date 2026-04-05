@@ -2,13 +2,13 @@ import { useState } from "react";
 import { supabase } from "../services/supabase";
 import { useNavigate, Link } from "react-router-dom";
 
-export default function Login() {
+export default function Signup() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const navigate = useNavigate();
 
-  const handleLogin = async () => {
-    const { data, error } = await supabase.auth.signInWithPassword({
+  const handleSignup = async () => {
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
     });
@@ -18,17 +18,13 @@ export default function Login() {
       return;
     }
 
-    const token = data.session.access_token;
-
-    // Save token
-    localStorage.setItem("token", token);
-
-    navigate("/dashboard");
+    alert("Signup successful! Please login.");
+    navigate("/login");
   };
 
   return (
     <div style={{ padding: "40px" }}>
-      <h2>Login</h2>
+      <h2>Sign Up</h2>
 
       <input
         placeholder="Email"
@@ -43,10 +39,10 @@ export default function Login() {
       />
       <br /><br />
 
-      <button onClick={handleLogin}>Login</button>
+      <button onClick={handleSignup}>Sign Up</button>
 
       <p>
-        Don’t have an account? <Link to="/signup">Sign up</Link>
+        Already have an account? <Link to="/login">Login</Link>
       </p>
     </div>
   );

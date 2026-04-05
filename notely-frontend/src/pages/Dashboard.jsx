@@ -1,30 +1,16 @@
-import { useEffect, useState } from "react";
-import api from "../services/api";
+import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 
 export default function Dashboard() {
-  const [notes, setNotes] = useState([]);
+  const navigate = useNavigate();
 
   useEffect(() => {
-    let ignore = false;
+    const token = localStorage.getItem("token");
 
-    api.get("/notes").then((res) => {
-      if (!ignore) setNotes(Array.isArray(res.data) ? res.data : []);
-    });
-
-    return () => {
-      ignore = true;
-    };
+    if (!token) {
+      navigate("/login");
+    }
   }, []);
 
-  return (
-    <div>
-      <h2>Your Notes</h2>
-
-      {notes.map((note) => (
-        <div key={note.id}>
-          <h3>{note.title}</h3>
-        </div>
-      ))}
-    </div>
-  );
+  return <h2>Dashboard</h2>;
 }
