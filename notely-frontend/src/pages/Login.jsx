@@ -1,19 +1,22 @@
 import { useState } from "react";
-import api from "../services/api";
 import { useNavigate, Link } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
   const navigate = useNavigate();
+  const { login } = useAuth();
 
-  const handleLogin = async () => {
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setError("");
     try {
-      const res = await api.post("/auth/login", { email, password });
-      localStorage.setItem("token", res.data.token);
+      await login(email, password);
       navigate("/dashboard");
     } catch (err) {
-      alert(err.response?.data?.error || "Login failed");
+      setError(err.message || "Login failed");
     }
   };
 
@@ -21,23 +24,32 @@ export default function Login() {
     <div style={{ padding: "40px" }}>
       <h2>Login</h2>
 
-      <input
-        placeholder="Email"
-        onChange={(e) => setEmail(e.target.value)}
-      />
-      <br /><br />
+      <form onSubmit={handleLogin}>
+        <input
+          placeholder="Email"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+        />
+        <br /><br />
 
-      <input
-        type="password"
-        placeholder="Password"
-        onChange={(e) => setPassword(e.target.value)}
-      />
-      <br /><br />
+        <input
+          type="password"
+          placeholder="Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+        />
+        <br /><br />
 
-      <button onClick={handleLogin}>Login</button>
+        {error && <p style={{ color: "red" }}>{error}</p>}
+
+        <button type="submit">Login</button>
+      </form>
 
       <p>
-        Don’t have an account? <Link to="/signup">Sign up</Link>
+        Don't have an account? <Link to="/signup">Sign up</Link>
       </p>
     </div>
   );
