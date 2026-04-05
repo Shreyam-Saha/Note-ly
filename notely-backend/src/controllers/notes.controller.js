@@ -29,7 +29,7 @@ exports.createNote = async (req, res) => {
         title: title.trim(),
         content,
         isPublic: typeof isPublic === "boolean" ? isPublic : false,
-        ownerId: "test-user",
+        ownerId: req.user.id,
       },
     });
 
@@ -47,13 +47,16 @@ exports.getNotes = async (req, res) => {
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
     const skip = (page - 1) * limit;
 
+    const where = { ownerId: req.user.id };
+
     const [notes, total] = await Promise.all([
       prisma.note.findMany({
+        where,
         orderBy: { createdAt: "desc" },
         skip,
         take: limit,
       }),
-      prisma.note.count(),
+      prisma.note.count({ where }),
     ]);
 
     res.json({
@@ -82,7 +85,7 @@ exports.getNoteById = async (req, res) => {
       where: { id: req.params.id },
     });
 
-    if (!note) {
+    if (!note || note.ownerId !== req.user.id) {
       return res.status(404).json({ error: "Note not found" });
     }
 
@@ -135,7 +138,7 @@ exports.updateNote = async (req, res) => {
       where: { id: req.params.id },
     });
 
-    if (!existing) {
+    if (!existing || existing.ownerId !== req.user.id) {
       return res.status(404).json({ error: "Note not found" });
     }
 
@@ -162,7 +165,7 @@ exports.deleteNote = async (req, res) => {
       where: { id: req.params.id },
     });
 
-    if (!existing) {
+    if (!existing || existing.ownerId !== req.user.id) {
       return res.status(404).json({ error: "Note not found" });
     }
 

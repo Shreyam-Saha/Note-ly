@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { supabase } from "../services/supabase";
+import api from "../services/api";
 import { useNavigate, Link } from "react-router-dom";
 
 export default function Login() {
@@ -8,22 +8,13 @@ export default function Login() {
   const navigate = useNavigate();
 
   const handleLogin = async () => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (error) {
-      alert(error.message);
-      return;
+    try {
+      const res = await api.post("/auth/login", { email, password });
+      localStorage.setItem("token", res.data.token);
+      navigate("/dashboard");
+    } catch (err) {
+      alert(err.response?.data?.error || "Login failed");
     }
-
-    const token = data.session.access_token;
-
-    // Save token
-    localStorage.setItem("token", token);
-
-    navigate("/dashboard");
   };
 
   return (

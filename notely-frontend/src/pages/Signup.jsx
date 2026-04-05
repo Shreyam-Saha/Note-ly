@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { supabase } from "../services/supabase";
+import api from "../services/api";
 import { useNavigate, Link } from "react-router-dom";
 
 export default function Signup() {
@@ -8,18 +8,13 @@ export default function Signup() {
   const navigate = useNavigate();
 
   const handleSignup = async () => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
-
-    if (error) {
-      alert(error.message);
-      return;
+    try {
+      await api.post("/auth/signup", { email, password });
+      alert("Signup successful! Please login.");
+      navigate("/login");
+    } catch (err) {
+      alert(err.response?.data?.error || "Signup failed");
     }
-
-    alert("Signup successful! Please login.");
-    navigate("/login");
   };
 
   return (
