@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import api from "../services/api";
+import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 
 export default function Dashboard() {
@@ -7,6 +8,7 @@ export default function Dashboard() {
   const [creating, setCreating] = useState(false);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const { logout } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -18,16 +20,13 @@ export default function Dashboard() {
         if (!ignore) setNotes(res.data.data);
       } catch (err) {
         console.error(err);
-        if (!ignore && err.response?.status === 401) {
-          navigate("/login");
-        }
       }
     }
 
     fetchNotes();
 
     return () => { ignore = true; };
-  }, [navigate]);
+  }, []);
 
   const handleCreateNote = async () => {
     if (!title.trim()) return;
@@ -43,23 +42,43 @@ export default function Dashboard() {
     }
   };
 
+  const handleLogout = async () => {
+    await logout();
+    navigate("/login");
+  };
+
   return (
     <div style={{ padding: "20px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h2>Your Notes</h2>
-        <button
-          onClick={() => setCreating(!creating)}
-          style={{
-            padding: "8px 16px",
-            backgroundColor: creating ? "#dc3545" : "#007bff",
-            color: "white",
-            border: "none",
-            borderRadius: "4px",
-            cursor: "pointer",
-          }}
-        >
-          {creating ? "Cancel" : "Create Note"}
-        </button>
+        <div style={{ display: "flex", gap: "8px" }}>
+          <button
+            onClick={() => setCreating(!creating)}
+            style={{
+              padding: "8px 16px",
+              backgroundColor: creating ? "#dc3545" : "#007bff",
+              color: "white",
+              border: "none",
+              borderRadius: "4px",
+              cursor: "pointer",
+            }}
+          >
+            {creating ? "Cancel" : "Create Note"}
+          </button>
+          <button
+            onClick={handleLogout}
+            style={{
+              padding: "8px 16px",
+              backgroundColor: "transparent",
+              color: "var(--text)",
+              border: "1px solid var(--border)",
+              borderRadius: "4px",
+              cursor: "pointer",
+            }}
+          >
+            Logout
+          </button>
+        </div>
       </div>
 
       {creating && (
