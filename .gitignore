@@ -1,5 +1,7 @@
 # Dependencies
 node_modules
+notely-frontend/package-lock.json
+notely-backend/package-lock.json
 
 # Environment variables
 .env
@@ -40,3 +42,4 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+notely-frontend/package-lock.json
