@@ -1,5 +1,4 @@
 const prisma = require("../config/db");
-const DOMPurify = require("isomorphic-dompurify");
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -25,12 +24,10 @@ exports.createNote = async (req, res) => {
       return res.status(400).json({ error: "content is required" });
     }
 
-    const cleanContent = DOMPurify.sanitize(content);
-
     const note = await prisma.note.create({
       data: {
         title: title.trim(),
-        content: cleanContent,
+        content,
         isPublic: typeof isPublic === "boolean" ? isPublic : false,
         ownerId: req.user.id,
       },
@@ -144,7 +141,7 @@ exports.updateNote = async (req, res) => {
       if (content === null) {
         return res.status(400).json({ error: "content cannot be null" });
       }
-      data.content = DOMPurify.sanitize(content);
+      data.content = content;
     }
 
     if (isPublic !== undefined) {
