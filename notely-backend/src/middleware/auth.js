@@ -13,7 +13,7 @@ async function authenticate(req, res, next) {
   const token = authHeader.split(" ")[1];
   try {
     const { payload } = await jwtVerify(token, JWKS);
-    req.user = { id: payload.sub };
+    req.user = { id: payload.sub, email: payload.email };
     next();
   } catch (err) {
     return res.status(401).json({ error: "Invalid or expired token" });
