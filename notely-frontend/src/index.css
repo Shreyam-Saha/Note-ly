@@ -97,6 +97,8 @@ body {
 /* Tiptap Editor Styles */
 .ProseMirror {
   min-height: 100%;
+  white-space: pre-wrap;
+  word-wrap: break-word;
 }
 
 .ProseMirror p.is-editor-empty:first-child::before {

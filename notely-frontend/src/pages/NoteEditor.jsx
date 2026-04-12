@@ -6,12 +6,16 @@ import Placeholder from "@tiptap/extension-placeholder";
 import debounce from "lodash/debounce";
 import api from "../services/api";
 import Toolbar from "../components/Toolbar";
+import ShareDialog from "../components/ShareDialog";
 import { Loader2, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "../context/AuthContext";
 
 export default function NoteEditor() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  
   const [note, setNote] = useState(null);
   const [title, setTitle] = useState("");
   const [loading, setLoading] = useState(true);
@@ -40,9 +44,6 @@ export default function NoteEditor() {
       }),
     ],
     content: "",
-    onUpdate: ({ editor }) => {
-      debouncedSave(id, { content: editor.getJSON(), title });
-    },
   });
 
   useEffect(() => {
@@ -60,7 +61,7 @@ export default function NoteEditor() {
       } catch (err) {
         console.error(err);
         if (!ignore) {
-          setError(err.response?.status === 404 ? "Note not found" : "Failed to load note");
+          setError(err.response?.status === 404 ? "Note not found or access denied" : "Failed to load note");
         }
       } finally {
         if (!ignore) setLoading(false);
@@ -73,21 +74,39 @@ export default function NoteEditor() {
     };
   }, [id, editor]);
 
-  // Update debouncedSave closure when title changes
+  // Handle read-only state based on permissions
+  const isOwner = note?.ownerId === user?.id;
+  const userShare = note?.shares?.find(s => s.userEmail === user?.email);
+  const canEdit = isOwner || userShare?.role === "EDIT";
+  const isReadOnly = !loading && !error && !canEdit;
+
   useEffect(() => {
     if (editor) {
-      editor.on('update', ({ editor }) => {
-         debouncedSave(id, { content: editor.getJSON(), title });
-      });
+      editor.setEditable(!isReadOnly);
     }
-  }, [title, editor, debouncedSave, id]);
+  }, [isReadOnly, editor]);
 
+  // Update debouncedSave closure for editor content changes
+  useEffect(() => {
+    if (editor && canEdit) {
+      const handleUpdate = ({ editor }) => {
+         debouncedSave(id, { content: editor.getJSON() });
+      };
+      editor.on('update', handleUpdate);
+      return () => {
+        editor.off('update', handleUpdate);
+      };
+    }
+  }, [editor, debouncedSave, id, canEdit]);
 
   const handleTitleChange = (e) => {
+    if (!canEdit) return;
     const newTitle = e.target.value;
     setTitle(newTitle);
-    if (editor) {
-      debouncedSave(id, { title: newTitle, content: editor.getJSON() });
+    
+    // Only save to backend if title is not empty, to avoid 400 Bad Request
+    if (editor && newTitle.trim().length > 0) {
+      debouncedSave(id, { title: newTitle.trim(), content: editor.getJSON() });
     }
   };
 
@@ -113,25 +132,29 @@ export default function NoteEditor() {
   return (
     <div className="flex flex-col h-screen max-h-screen">
       <div className="flex items-center justify-between p-4 border-b bg-background">
-        <Button variant="ghost" size="sm" onClick={() => navigate("/dashboard")} className="gap-2">
-          <ArrowLeft className="w-4 h-4" />
-          Dashboard
-        </Button>
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="sm" onClick={() => navigate("/dashboard")} className="gap-2">
+            <ArrowLeft className="w-4 h-4" />
+            Dashboard
+          </Button>
+          {isOwner && <ShareDialog noteId={id} />}
+        </div>
         <span className="text-sm text-muted-foreground font-medium">
-          {saving ? "Saving..." : "Saved"}
+          {isReadOnly ? "Read Only" : (saving ? "Saving..." : "Saved")}
         </span>
       </div>
 
       <div className="flex flex-col flex-1 overflow-hidden bg-background">
         <div className="max-w-4xl mx-auto w-full flex flex-col h-full bg-card shadow-sm border-x border-b">
-          <Toolbar editor={editor} />
+          {!isReadOnly && <Toolbar editor={editor} />}
           <div className="flex-1 overflow-y-auto p-8 sm:p-12">
             <input
               type="text"
               placeholder="Note Title"
               value={title}
               onChange={handleTitleChange}
-              className="w-full text-4xl font-bold bg-transparent border-none outline-none mb-8 placeholder:text-muted-foreground text-foreground"
+              readOnly={isReadOnly}
+              className="w-full text-4xl font-bold bg-transparent border-none outline-none mb-8 placeholder:text-muted-foreground text-foreground disabled:opacity-100"
             />
             <EditorContent editor={editor} className="prose prose-invert prose-primary max-w-none focus:outline-none min-h-[500px]" />
           </div>

@@ -3,7 +3,7 @@ import { Outlet, useNavigate, useParams, Link, useLocation } from "react-router-
 import api from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Trash2, LogOut, FileText, Loader2 } from "lucide-react";
+import { PlusCircle, Trash2, LogOut, FileText, Loader2, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function AppLayout() {
@@ -112,15 +112,20 @@ export default function AppLayout() {
                       : "text-muted-foreground hover:bg-secondary hover:text-secondary-foreground"
                   )}
                 >
-                  <span className="truncate">{note.title || "Untitled"}</span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 opacity-0 group-hover:opacity-100 hover:bg-destructive hover:text-destructive-foreground transition-opacity"
-                    onClick={(e) => handleDeleteNote(e, note.id)}
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </Button>
+                  <div className="flex items-center gap-2 truncate">
+                    {note.ownerId !== user?.id && <Users className="w-3.5 h-3.5 shrink-0 text-muted-foreground" title="Shared with you" />}
+                    <span className="truncate">{note.title || "Untitled"}</span>
+                  </div>
+                  {note.ownerId === user?.id && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 opacity-0 group-hover:opacity-100 hover:bg-destructive hover:text-destructive-foreground transition-opacity shrink-0"
+                      onClick={(e) => handleDeleteNote(e, note.id)}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  )}
                 </Link>
               ))}
             </div>
