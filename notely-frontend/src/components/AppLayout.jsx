@@ -3,11 +3,62 @@ import { Outlet, useNavigate, useParams, Link, useLocation } from "react-router-
 import api from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Trash2, LogOut, FileText, Loader2, Users } from "lucide-react";
+import { PlusCircle, Trash2, LogOut, FileText, Loader2, Users, Sun, Moon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 export default function AppLayout() {
   const [notes, setNotes] = useState([]);
+  const [isDark, setIsDark] = useState(() => localStorage.getItem("theme") === "dark");
+  
+  useEffect(() => {
+    if (isDark) {
+      document.documentElement.classList.add("dark");
+      localStorage.setItem("theme", "dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+      localStorage.setItem("theme", "light");
+    }
+  }, [isDark]);
+
+  const toggleTheme = async (event) => {
+    const nextDark = !isDark;
+
+    if (!document.startViewTransition) {
+      setIsDark(nextDark);
+      return;
+    }
+
+    const x = event.clientX;
+    const y = event.clientY;
+    const endRadius = Math.hypot(
+      Math.max(x, innerWidth - x),
+      Math.max(y, innerHeight - y)
+    );
+
+    const transition = document.startViewTransition(() => {
+      setIsDark(nextDark);
+    });
+
+    await transition.ready;
+
+    const clipPath = [
+      `circle(0px at ${x}px ${y}px)`,
+      `circle(${endRadius}px at ${x}px ${y}px)`
+    ];
+
+    document.documentElement.animate(
+      {
+        clipPath: clipPath,
+      },
+      {
+        duration: 800,
+        easing: 'ease-out',
+        pseudoElement: '::view-transition-new(root)',
+      }
+    );
+  };
+
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const navigate = useNavigate();
@@ -48,14 +99,18 @@ export default function AppLayout() {
     e.stopPropagation();
     if (!window.confirm("Are you sure you want to delete this note?")) return;
     
+    const previousNotes = [...notes];
+    setNotes(notes.filter(n => n.id !== noteId));
+    
     try {
       await api.delete(`/notes/${noteId}`);
-      await fetchNotes();
       if (id === noteId) {
         navigate("/dashboard");
       }
     } catch (err) {
       console.error("Failed to delete note:", err);
+      setNotes(previousNotes);
+      toast.error("Failed to delete note. Please try again.");
     }
   };
 
@@ -137,9 +192,14 @@ export default function AppLayout() {
             <span className="text-sm text-muted-foreground truncate px-2">
               {user?.email}
             </span>
-            <Button variant="ghost" size="icon" onClick={handleLogout} title="Logout">
-              <LogOut className="w-4 h-4" />
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button variant="ghost" size="icon" onClick={toggleTheme} title="Toggle theme">
+                {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              </Button>
+              <Button variant="ghost" size="icon" onClick={handleLogout} title="Logout">
+                <LogOut className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
         </div>
       </aside>
