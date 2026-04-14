@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -35,8 +35,8 @@ export default function NoteEditor() {
 
   const userColor = useMemo(() => getRandomColor(), []);
 
-  const debouncedSaveTitle = useCallback(
-    debounce(async (id, newTitle) => {
+  const debouncedSaveTitle = useMemo(
+    () => debounce(async (id, newTitle) => {
       setSaving(true);
       try {
         await api.put(`/notes/${id}`, { title: newTitle });
