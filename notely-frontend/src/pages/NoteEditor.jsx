@@ -1,8 +1,12 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
+import Collaboration from "@tiptap/extension-collaboration";
+import CollaborationCaret from "@tiptap/extension-collaboration-caret";
+import * as Y from "yjs";
+import { HocuspocusProvider } from "@hocuspocus/provider";
 import debounce from "lodash/debounce";
 import api from "../services/api";
 import Toolbar from "../components/Toolbar";
@@ -10,6 +14,11 @@ import ShareDialog from "../components/ShareDialog";
 import { Loader2, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "../context/AuthContext";
+
+const colors = [
+  "#958DF1", "#F98181", "#FBCE76", "#FFC75F", "#82C91E", "#4DABF7", "#3BC9DB", "#B197FC"
+];
+const getRandomColor = () => colors[Math.floor(Math.random() * colors.length)];
 
 export default function NoteEditor() {
   const { id } = useParams();
@@ -21,14 +30,18 @@ export default function NoteEditor() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [provider, setProvider] = useState(null);
+  const [ydoc, setYdoc] = useState(null);
 
-  const debouncedSave = useCallback(
-    debounce(async (id, data) => {
+  const userColor = useMemo(() => getRandomColor(), []);
+
+  const debouncedSaveTitle = useMemo(
+    () => debounce(async (id, newTitle) => {
       setSaving(true);
       try {
-        await api.put(`/notes/${id}`, data);
+        await api.put(`/notes/${id}`, { title: newTitle });
       } catch (err) {
-        console.error("Save error:", err);
+        console.error("Save title error:", err);
       } finally {
         setSaving(false);
       }
@@ -36,15 +49,26 @@ export default function NoteEditor() {
     []
   );
 
-  const editor = useEditor({
-    extensions: [
-      StarterKit,
-      Placeholder.configure({
-        placeholder: "Start typing...",
-      }),
-    ],
-    content: "",
-  });
+  // Initialize Hocuspocus Provider
+  useEffect(() => {
+    const doc = new Y.Doc();
+    setYdoc(doc);
+    const wsUrl = import.meta.env.VITE_WS_URL || "ws://localhost:5000";
+    
+    const newProvider = new HocuspocusProvider({
+      url: wsUrl,
+      name: id,
+      document: doc,
+    });
+
+    setProvider(newProvider);
+
+    return () => {
+      newProvider.destroy();
+      setProvider(null);
+      setYdoc(null);
+    };
+  }, [id]);
 
   useEffect(() => {
     let ignore = false;
@@ -54,9 +78,6 @@ export default function NoteEditor() {
         if (!ignore) {
           setNote(res.data);
           setTitle(res.data.title || "");
-          if (editor && res.data.content) {
-            editor.commands.setContent(res.data.content);
-          }
         }
       } catch (err) {
         console.error(err);
@@ -72,7 +93,7 @@ export default function NoteEditor() {
     return () => {
       ignore = true;
     };
-  }, [id, editor]);
+  }, [id]);
 
   // Handle read-only state based on permissions
   const isOwner = note?.ownerId === user?.id;
@@ -80,37 +101,17 @@ export default function NoteEditor() {
   const canEdit = isOwner || userShare?.role === "EDIT";
   const isReadOnly = !loading && !error && !canEdit;
 
-  useEffect(() => {
-    if (editor) {
-      editor.setEditable(!isReadOnly);
-    }
-  }, [isReadOnly, editor]);
-
-  // Update debouncedSave closure for editor content changes
-  useEffect(() => {
-    if (editor && canEdit) {
-      const handleUpdate = ({ editor }) => {
-         debouncedSave(id, { content: editor.getJSON() });
-      };
-      editor.on('update', handleUpdate);
-      return () => {
-        editor.off('update', handleUpdate);
-      };
-    }
-  }, [editor, debouncedSave, id, canEdit]);
-
   const handleTitleChange = (e) => {
     if (!canEdit) return;
     const newTitle = e.target.value;
     setTitle(newTitle);
     
-    // Only save to backend if title is not empty, to avoid 400 Bad Request
-    if (editor && newTitle.trim().length > 0) {
-      debouncedSave(id, { title: newTitle.trim(), content: editor.getJSON() });
+    if (newTitle.trim().length > 0) {
+      debouncedSaveTitle(id, newTitle.trim());
     }
   };
 
-  if (loading) {
+  if (loading || !provider) {
     return (
       <div className="flex h-screen items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -146,20 +147,93 @@ export default function NoteEditor() {
 
       <div className="flex flex-col flex-1 overflow-hidden bg-background">
         <div className="max-w-4xl mx-auto w-full flex flex-col h-full bg-card shadow-sm border-x border-b">
-          {!isReadOnly && <Toolbar editor={editor} />}
-          <div className="flex-1 overflow-y-auto p-8 sm:p-12">
-            <input
-              type="text"
-              placeholder="Note Title"
-              value={title}
-              onChange={handleTitleChange}
-              readOnly={isReadOnly}
-              className="w-full text-4xl font-bold bg-transparent border-none outline-none mb-8 placeholder:text-muted-foreground text-foreground disabled:opacity-100"
-            />
-            <EditorContent editor={editor} className="prose prose-invert prose-primary max-w-none focus:outline-none min-h-[500px]" />
-          </div>
+          <EditorWorkspace 
+            key={ydoc?.clientID || "editor"}
+            provider={provider} 
+            ydoc={ydoc}
+            isReadOnly={isReadOnly} 
+            user={user} 
+            userColor={userColor} 
+            title={title}
+            handleTitleChange={handleTitleChange}
+            setSaving={setSaving}
+          />
         </div>
       </div>
     </div>
+  );
+}
+
+function EditorWorkspace({ provider, ydoc, isReadOnly, user, userColor, title, handleTitleChange, setSaving }) {
+  const editor = useEditor({
+    extensions: [
+      StarterKit.configure({
+        history: false, // Collaborative history is handled by Yjs
+      }),
+      Placeholder.configure({
+        placeholder: "Start typing...",
+      }),
+      Collaboration.configure({
+        document: ydoc,
+      }),
+      CollaborationCaret.configure({
+        provider,
+        user: {
+          name: user?.email || "Anonymous",
+          color: userColor,
+        },
+      }),
+    ],
+  });
+
+  useEffect(() => {
+    if (editor) {
+      editor.setEditable(!isReadOnly);
+    }
+  }, [isReadOnly, editor]);
+
+  // Listen to provider connection status for saving indicator
+  useEffect(() => {
+    if (!provider) return;
+
+    const handleSynced = () => setSaving(false);
+    const handleUpdate = () => setSaving(true);
+    
+    provider.on("synced", handleSynced);
+    
+    if (editor) {
+       editor.on("update", handleUpdate);
+       
+       let timeout;
+       const handleStopSaving = () => {
+         clearTimeout(timeout);
+         timeout = setTimeout(() => setSaving(false), 1000);
+       };
+       editor.on("update", handleStopSaving);
+       
+       return () => {
+         editor.off("update", handleUpdate);
+         editor.off("update", handleStopSaving);
+         provider.off("synced", handleSynced);
+         clearTimeout(timeout);
+       };
+    }
+  }, [provider, editor, setSaving]);
+
+  return (
+    <>
+      {!isReadOnly && <Toolbar editor={editor} />}
+      <div className="flex-1 overflow-y-auto p-8 sm:p-12">
+        <input
+          type="text"
+          placeholder="Note Title"
+          value={title}
+          onChange={handleTitleChange}
+          readOnly={isReadOnly}
+          className="w-full text-4xl font-bold bg-transparent border-none outline-none mb-8 placeholder:text-muted-foreground text-foreground disabled:opacity-100"
+        />
+        <EditorContent editor={editor} className="prose prose-invert prose-primary max-w-none focus:outline-none min-h-[500px]" />
+      </div>
+    </>
   );
 }
