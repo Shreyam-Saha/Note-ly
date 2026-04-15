@@ -5,6 +5,9 @@ const WebSocket = require("ws");
 const { Server } = require("@hocuspocus/server");
 const { TiptapTransformer } = require("@hocuspocus/transformer");
 const StarterKit = require("@tiptap/starter-kit").default;
+const Image = require("@tiptap/extension-image").default;
+const CodeBlock = require("@tiptap/extension-code-block").default;
+const { startCleanupJob } = require("./src/jobs/cleanupOrphanedImages");
 
 const app = require("./src/app");
 const prisma = require("./src/config/db");
@@ -32,7 +35,9 @@ const hocuspocusServer = new Server({
       // If document is already loaded/in memory, we don't need to do anything
       if (data.document.isEmpty("default")) {
         const ydoc = TiptapTransformer.toYdoc(note.content, "default", [
-          StarterKit,
+          StarterKit.configure({ codeBlock: false }),
+          Image,
+          CodeBlock
         ]);
         
         // Merge the created ydoc into the existing one
@@ -79,4 +84,5 @@ wss.on("connection", (socket, request) => {
 server.listen(PORT, () => {
   console.log(`Express API running on http://localhost:${PORT}`);
   console.log(`Hocuspocus WebSocket Server running on ws://localhost:${PORT}`);
+  startCleanupJob();
 });

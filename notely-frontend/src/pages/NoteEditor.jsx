@@ -5,15 +5,30 @@ import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import Collaboration from "@tiptap/extension-collaboration";
 import CollaborationCaret from "@tiptap/extension-collaboration-caret";
+import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
+import { ReactNodeViewRenderer } from "@tiptap/react";
+import CodeBlockComponent from "../components/editor/CodeBlockComponent";
+import { CustomImage } from "../components/editor/CustomImageExtension";
+import { ImagePlaceholder } from "../components/editor/ImagePlaceholderExtension";
+import { common, createLowlight } from "lowlight";
+import imageCompression from "browser-image-compression";
+import { v4 as uuidv4 } from "uuid";
+import GlobalDragHandle from "tiptap-extension-global-drag-handle";
 import * as Y from "yjs";
 import { HocuspocusProvider } from "@hocuspocus/provider";
 import debounce from "lodash/debounce";
 import api from "../services/api";
+import supabase from "../config/supabase";
+import { toast } from "sonner";
 import Toolbar from "../components/Toolbar";
 import ShareDialog from "../components/ShareDialog";
 import { Loader2, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "../context/AuthContext";
+import { SlashCommands, getSuggestionItems, renderItems } from "../components/editor/slashExtension";
+import "highlight.js/styles/github-dark.css";
+
+const lowlight = createLowlight(common);
 
 const colors = [
   "#958DF1", "#F98181", "#FBCE76", "#FFC75F", "#82C91E", "#4DABF7", "#3BC9DB", "#B197FC"
@@ -164,11 +179,84 @@ export default function NoteEditor() {
   );
 }
 
+const uploadImage = async (file) => {
+  if (!file) return null;
+  
+  // Compress image
+  let compressedFile = file;
+  try {
+    const options = {
+      maxSizeMB: 1,
+      maxWidthOrHeight: 1920,
+      useWebWorker: true
+    };
+    compressedFile = await imageCompression(file, options);
+  } catch (error) {
+    console.error("Image compression error:", error);
+    // fallback to original file if compression fails
+  }
+
+  const fileExt = compressedFile.name && compressedFile.name.includes('.') ? compressedFile.name.split('.').pop() : compressedFile.type.split('/')[1] || 'png';
+  const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
+
+  const { error } = await supabase.storage
+    .from('images')
+    .upload(fileName, compressedFile);
+
+  if (error) {
+    console.error("Upload error:", error);
+    toast.error("Failed to upload image. Please check your connection.");
+    return null;
+  }
+
+  const { data: publicUrlData } = supabase.storage
+    .from('images')
+    .getPublicUrl(fileName);
+
+  return publicUrlData.publicUrl;
+};
+
 function EditorWorkspace({ provider, ydoc, isReadOnly, user, userColor, title, handleTitleChange, setSaving }) {
+  const handleImageInsertion = (file, view, coordinates = null) => {
+    if (!file.type.startsWith('image/')) return;
+    
+    const id = uuidv4();
+    const pos = coordinates ? coordinates.pos : view.state.selection.to;
+    const placeholderNode = view.state.schema.nodes.imagePlaceholder.create({ id });
+    
+    view.dispatch(view.state.tr.insert(pos, placeholderNode));
+
+    uploadImage(file).then((url) => {
+      const state = view.state;
+      let placeholderPos = null;
+      state.doc.descendants((node, p) => {
+        if (node.type.name === 'imagePlaceholder' && node.attrs.id === id) {
+          placeholderPos = p;
+        }
+      });
+
+      if (placeholderPos !== null) {
+        if (url) {
+          const imageNode = state.schema.nodes.image.create({ src: url });
+          view.dispatch(state.tr.replaceWith(placeholderPos, placeholderPos + 1, imageNode));
+        } else {
+          view.dispatch(state.tr.delete(placeholderPos, placeholderPos + 1));
+        }
+      }
+    });
+  };
+
+  const handleToolbarImageUpload = (file) => {
+    if (editor) {
+      handleImageInsertion(file, editor.view);
+    }
+  };
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
         history: false, // Collaborative history is handled by Yjs
+        codeBlock: false,
       }),
       Placeholder.configure({
         placeholder: "Start typing...",
@@ -183,7 +271,71 @@ function EditorWorkspace({ provider, ydoc, isReadOnly, user, userColor, title, h
           color: userColor,
         },
       }),
+      CodeBlockLowlight.extend({
+        addNodeView() {
+          return ReactNodeViewRenderer(CodeBlockComponent);
+        },
+      }).configure({
+        lowlight,
+      }),
+      CustomImage.configure({
+        allowBase64: true,
+      }),
+      ImagePlaceholder,
+      GlobalDragHandle.configure({
+        dragHandleWidth: 20,
+      }),
+      SlashCommands.configure({
+        suggestion: {
+          items: getSuggestionItems,
+          render: renderItems,
+        },
+      }),
     ],
+    editorProps: {
+      // eslint-disable-next-line no-unused-vars
+      handleDrop: function(view, event, _slice, moved) {
+        if (!moved && event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0]) {
+          const file = event.dataTransfer.files[0];
+          if (file.type.startsWith('image/')) {
+            event.preventDefault();
+            handleImageInsertion(file, view, view.posAtCoords({ left: event.clientX, top: event.clientY }));
+            return true;
+          }
+        }
+        return false;
+      },
+      // eslint-disable-next-line no-unused-vars
+      handlePaste: function(view, event, _slice) {
+        const files = event.clipboardData?.files;
+        if (files && files.length > 0) {
+          let handled = false;
+          for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            if (file.type.startsWith('image/')) {
+              event.preventDefault();
+              handled = true;
+              handleImageInsertion(file, view);
+            }
+          }
+          if (handled) return true;
+        }
+
+        // Fallback for some browsers that only use items
+        const items = Array.from(event.clipboardData?.items || []);
+        for (const item of items) {
+          if (item.type.startsWith('image/') && item.kind === 'file') {
+            const file = item.getAsFile();
+            if (file) {
+              event.preventDefault();
+              handleImageInsertion(file, view);
+              return true;
+            }
+          }
+        }
+        return false;
+      },
+    },
   });
 
   useEffect(() => {
@@ -222,7 +374,7 @@ function EditorWorkspace({ provider, ydoc, isReadOnly, user, userColor, title, h
 
   return (
     <>
-      {!isReadOnly && <Toolbar editor={editor} />}
+      {!isReadOnly && <Toolbar editor={editor} onImageUpload={handleToolbarImageUpload} />}
       <div className="flex-1 overflow-y-auto p-8 sm:p-12">
         <input
           type="text"

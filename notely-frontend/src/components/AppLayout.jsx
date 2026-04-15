@@ -103,7 +103,24 @@ export default function AppLayout() {
     setNotes(notes.filter(n => n.id !== noteId));
     
     try {
+      // Fetch the note to extract image URLs
+      const res = await api.get(`/notes/${noteId}`);
+      const content = res.data.content;
+      
+      // Delete the note
       await api.delete(`/notes/${noteId}`);
+      
+      // Extract and delete images
+      if (content) {
+        import('../config/supabase').then(({ default: supabase }) => {
+          const contentStr = JSON.stringify(content);
+          const urls = [...contentStr.matchAll(/https:\/\/[^"]+\/storage\/v1\/object\/public\/images\/([^"]+)/g)].map(m => m[1]);
+          if (urls.length > 0) {
+            supabase.storage.from('images').remove(urls).catch(err => console.error("Failed to clean up images:", err));
+          }
+        });
+      }
+      
       if (id === noteId) {
         navigate("/dashboard");
       }
