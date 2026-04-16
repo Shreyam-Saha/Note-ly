@@ -26,7 +26,6 @@ import { Loader2, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "../context/AuthContext";
 import { SlashCommands, getSuggestionItems, renderItems } from "../components/editor/slashExtension";
-import "highlight.js/styles/github-dark.css";
 
 const lowlight = createLowlight(common);
 
@@ -49,6 +48,43 @@ export default function NoteEditor() {
   const [ydoc, setYdoc] = useState(null);
 
   const userColor = useMemo(() => getRandomColor(), []);
+
+  // Dynamically load highlight.js theme based on document dark mode
+  useEffect(() => {
+    const updateTheme = () => {
+      const isDark = document.documentElement.classList.contains('dark');
+      const theme = isDark ? 'github-dark' : 'github';
+      const linkId = 'highlight-theme';
+      let link = document.getElementById(linkId);
+      
+      if (!link) {
+        link = document.createElement('link');
+        link.id = linkId;
+        link.rel = 'stylesheet';
+        document.head.appendChild(link);
+      }
+      
+      // Use unpkg/cdnjs to load the css dynamically
+      const url = `https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/${theme}.min.css`;
+      if (link.href !== url) {
+        link.href = url;
+      }
+    };
+
+    updateTheme(); // Initial load
+
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.attributeName === 'class') {
+          updateTheme();
+        }
+      });
+    });
+
+    observer.observe(document.documentElement, { attributes: true });
+
+    return () => observer.disconnect();
+  }, []);
 
   const debouncedSaveTitle = useMemo(
     () => debounce(async (id, newTitle) => {
@@ -161,7 +197,7 @@ export default function NoteEditor() {
       </div>
 
       <div className="flex flex-col flex-1 overflow-hidden bg-background">
-        <div className="max-w-4xl mx-auto w-full flex flex-col h-full bg-card shadow-sm border-x border-b">
+        <div className="max-w-4xl mx-auto w-full flex flex-col h-full bg-card shadow-sm border-x border-b border-zinc-200 dark:border-zinc-800">
           <EditorWorkspace 
             key={ydoc?.clientID || "editor"}
             provider={provider} 
@@ -255,7 +291,7 @@ function EditorWorkspace({ provider, ydoc, isReadOnly, user, userColor, title, h
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
-        history: false, // Collaborative history is handled by Yjs
+        undoRedo: false, // Collaborative history is handled by Yjs
         codeBlock: false,
       }),
       Placeholder.configure({
@@ -274,6 +310,17 @@ function EditorWorkspace({ provider, ydoc, isReadOnly, user, userColor, title, h
       CodeBlockLowlight.extend({
         addNodeView() {
           return ReactNodeViewRenderer(CodeBlockComponent);
+        },
+        addKeyboardShortcuts() {
+          return {
+            ...this.parent?.(),
+            Tab: () => {
+              if (this.editor.isActive('codeBlock')) {
+                return this.editor.commands.insertContent('\t');
+              }
+              return false;
+            },
+          };
         },
       }).configure({
         lowlight,
@@ -384,7 +431,7 @@ function EditorWorkspace({ provider, ydoc, isReadOnly, user, userColor, title, h
           readOnly={isReadOnly}
           className="w-full text-4xl font-bold bg-transparent border-none outline-none mb-8 placeholder:text-muted-foreground text-foreground disabled:opacity-100"
         />
-        <EditorContent editor={editor} className="prose prose-invert prose-primary max-w-none focus:outline-none min-h-[500px]" />
+        <EditorContent editor={editor} className="prose dark:prose-invert prose-primary max-w-none focus:outline-none min-h-[500px] border-none" />
       </div>
     </>
   );

@@ -35,7 +35,7 @@ const hocuspocusServer = new Server({
       // If document is already loaded/in memory, we don't need to do anything
       if (data.document.isEmpty("default")) {
         const ydoc = TiptapTransformer.toYdoc(note.content, "default", [
-          StarterKit.configure({ codeBlock: false }),
+          StarterKit.configure({ codeBlock: false, undoRedo: false }),
           Image,
           CodeBlock
         ]);
