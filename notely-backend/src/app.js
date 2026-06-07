@@ -4,7 +4,6 @@ const notesRoutes = require("./routes/notes.routes");
 
 const app = express();
 
-// Middlewares
 app.use(cors());
 app.use(express.json());
 

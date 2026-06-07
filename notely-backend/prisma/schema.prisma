@@ -7,13 +7,29 @@ datasource db {
 }
 
 model Note {
-  id        String   @id @default(uuid())
+  id        String      @id @default(uuid())
   title     String
   content   Json
-  isPublic  Boolean  @default(false)
+  isPublic  Boolean     @default(false)
 
   ownerId   String
 
+  shares    NoteShare[]
+
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+}
+
+model NoteShare {
+  id        String   @id @default(uuid())
+  
+  noteId    String
+  note      Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  
+  userEmail String
+  role      String   @default("READ") // "READ" or "EDIT"
+
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  
+  @@unique([noteId, userEmail])
 }

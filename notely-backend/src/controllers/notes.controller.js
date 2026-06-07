@@ -29,7 +29,7 @@ exports.createNote = async (req, res) => {
         title: title.trim(),
         content,
         isPublic: typeof isPublic === "boolean" ? isPublic : false,
-        ownerId: "test-user",
+        ownerId: req.user.id,
       },
     });
 
@@ -47,13 +47,26 @@ exports.getNotes = async (req, res) => {
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
     const skip = (page - 1) * limit;
 
+    const where = {
+      OR: [
+        { ownerId: req.user.id },
+        { shares: { some: { userEmail: req.user.email } } }
+      ]
+    };
+
     const [notes, total] = await Promise.all([
       prisma.note.findMany({
+        where,
         orderBy: { createdAt: "desc" },
         skip,
         take: limit,
+        include: {
+          shares: {
+            where: { userEmail: req.user.email }
+          }
+        }
       }),
-      prisma.note.count(),
+      prisma.note.count({ where }),
     ]);
 
     res.json({
@@ -80,9 +93,20 @@ exports.getNoteById = async (req, res) => {
 
     const note = await prisma.note.findUnique({
       where: { id: req.params.id },
+      include: {
+        shares: {
+          where: { userEmail: req.user.email }
+        }
+      }
     });
 
     if (!note) {
+      return res.status(404).json({ error: "Note not found" });
+    }
+
+    const hasAccess = note.ownerId === req.user.id || note.shares.length > 0;
+
+    if (!hasAccess) {
       return res.status(404).json({ error: "Note not found" });
     }
 
@@ -133,10 +157,18 @@ exports.updateNote = async (req, res) => {
 
     const existing = await prisma.note.findUnique({
       where: { id: req.params.id },
+      include: { shares: { where: { userEmail: req.user.email } } }
     });
 
     if (!existing) {
       return res.status(404).json({ error: "Note not found" });
+    }
+
+    const canEdit = existing.ownerId === req.user.id || 
+                    (existing.shares.length > 0 && existing.shares[0].role === "EDIT");
+
+    if (!canEdit) {
+      return res.status(403).json({ error: "You do not have permission to edit this note" });
     }
 
     const note = await prisma.note.update({
@@ -162,8 +194,8 @@ exports.deleteNote = async (req, res) => {
       where: { id: req.params.id },
     });
 
-    if (!existing) {
-      return res.status(404).json({ error: "Note not found" });
+    if (!existing || existing.ownerId !== req.user.id) {
+      return res.status(404).json({ error: "Note not found or no permission to delete" });
     }
 
     await prisma.note.delete({

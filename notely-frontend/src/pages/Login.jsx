@@ -1,137 +1,117 @@
 import { useState } from "react";
-import { supabase } from "../services/supabase";
-import { useNavigate } from "react-router-dom";
-import "../App.css";
+import { useNavigate, Link } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { FileText, Loader2 } from "lucide-react";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { login } = useAuth();
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    setError("");
     setLoading(true);
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (error) {
-      alert(error.message);
+    try {
+      await login(email, password);
+      navigate("/dashboard");
+    } catch (err) {
+      setError(err.message || "Login failed");
+    } finally {
       setLoading(false);
-      return;
     }
-
-    const token = data.session.access_token;
-    localStorage.setItem("token", token);
-    navigate("/dashboard");
   };
 
   return (
-    <div className="login-container">
-      <div className="mesh-bg"></div>
-      
-      <div className="login-card glass animate-fade-in">
-        <div className="brand">
-          <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect width="40" height="40" rx="10" fill="url(#gradient)" />
-            <path d="M12 14H28M12 20H20M12 26H24" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
-            <defs>
-              <linearGradient id="gradient" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
-                <stop stopColor="#bd9dff" />
-                <stop offset="1" stopColor="#9492ff" />
-              </linearGradient>
-            </defs>
-          </svg>
-          <h1>Note-ly</h1>
-          <p className="subtitle">Enterprise Knowledge Hub</p>
+    <div className="min-h-screen flex items-center justify-center px-4">
+      <div className="w-full max-w-sm">
+        <div className="flex flex-col items-center gap-2 mb-8">
+          <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-primary/10 border border-primary/20">
+            <FileText className="w-6 h-6 text-primary" />
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight">Notely</h1>
+          <p className="text-sm text-muted-foreground">
+            Your workspace for ideas
+          </p>
         </div>
 
-        <form onSubmit={handleLogin}>
-          <div className="input-group">
-            <label className="input-label">Email Address</label>
-            <input
-              className="input-field"
-              placeholder="name@enterprise.com"
-              type="email"
-              required
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </div>
+        <Card>
+          <CardHeader className="text-center">
+            <CardTitle className="text-xl">Welcome back</CardTitle>
+            <CardDescription>
+              Sign in to your account to continue
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  autoComplete="email"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="Enter your password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  autoComplete="current-password"
+                />
+              </div>
 
-          <div className="input-group">
-            <label className="input-label">Password</label>
-            <input
-              className="input-field"
-              type="password"
-              placeholder="••••••••"
-              required
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </div>
+              {error && (
+                <div className="rounded-md bg-destructive/10 border border-destructive/20 px-3 py-2 text-sm text-destructive">
+                  {error}
+                </div>
+              )}
 
-          <button className="btn-primary" type="submit" disabled={loading} style={{ width: "100%", marginTop: "1rem" }}>
-            {loading ? "Authenticating..." : "Sign In to Workspace"}
-          </button>
-        </form>
+              <Button type="submit" className="w-full" size="lg" disabled={loading}>
+                {loading && <Loader2 className="animate-spin" />}
+                Sign in
+              </Button>
+            </form>
+          </CardContent>
+          <CardFooter className="justify-center">
+            <p className="text-sm text-muted-foreground">
+              Don&apos;t have an account?{" "}
+              <Link
+                to="/signup"
+                className="text-primary font-medium hover:underline underline-offset-4"
+              >
+                Sign up
+              </Link>
+            </p>
+          </CardFooter>
+        </Card>
 
-        <div className="footer">
-          <p>Don't have an account? <a href="#">Create Workspace</a></p>
-          <a href="#" className="forgot-pass">Forgot Password?</a>
-        </div>
+        <p className="text-xs text-muted-foreground text-center mt-6">
+          Secure, fast, and built for productivity.
+        </p>
       </div>
-
-      <style>{`
-        .login-container {
-          height: 100vh;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 1.5rem;
-        }
-
-        .login-card {
-          width: 100%;
-          max-width: 440px;
-          padding: 3rem 2.5rem;
-          display: flex;
-          flex-direction: column;
-          gap: 2rem;
-        }
-
-        .brand {
-          text-align: center;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 0.75rem;
-        }
-
-        .brand h1 {
-          font-size: 1.75rem;
-          color: var(--text-primary);
-        }
-
-        .subtitle {
-          color: var(--text-secondary);
-          font-size: 0.9375rem;
-        }
-
-        .footer {
-          text-align: center;
-          display: flex;
-          flex-direction: column;
-          gap: 1rem;
-          font-size: 0.875rem;
-          color: var(--text-secondary);
-        }
-
-        .forgot-pass {
-          opacity: 0.7;
-          font-size: 0.8125rem;
-        }
-      `}</style>
     </div>
   );
 }
